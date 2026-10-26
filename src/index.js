@@ -14,7 +14,7 @@ import {
   hashPassword, verifyPassword, publicUser, getUser, requireUser, requireAdmin, createSession, destroySession,
   isBlocked, recordFail, clearFails, validateName, validateUsername, validatePassword,
 } from './auth.js';
-import { readPage, applySync, TABLES, archiveInfo, archiveMove, archiveRead, archiveClear, archiveStudentCount, archiveStudentDelete } from './store.js';
+import { readPage, applySync, TABLES, archiveInfo, archiveMove, archiveRead, archiveClear, archiveStudentCount, archiveStudentDelete, archiveStudentsCount, archiveStudentsDelete } from './store.js';
 import { listUsers, createUser, updateUser, deleteUser, updateSelf } from './users.js';
 import { waliInfo, waliStudents, waliReport } from './wali.js';
 
@@ -138,6 +138,14 @@ async function route(request, env, url) {
   if (path === '/api/archive/delete-student' && method === 'POST') {
     await requireAdmin(env, request);
     return archiveStudentDelete(env, await readJson(request, 2_000));
+  }
+  if (path === '/api/archive/students-count' && method === 'POST') {
+    await requireAdmin(env, request);
+    return archiveStudentsCount(env, await readJson(request, 200_000));
+  }
+  if (path === '/api/archive/students-delete' && method === 'POST') {
+    await requireAdmin(env, request);
+    return archiveStudentsDelete(env, await readJson(request, 200_000));
   }
   if (path === '/api/archive/clear' && method === 'POST') {
     await requireAdmin(env, request);

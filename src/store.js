@@ -197,3 +197,28 @@ export async function archiveStudentDelete(env, body) {
   const r = await env.DB.prepare('DELETE FROM progress_archive WHERE student_id = ?1').bind(sid).run();
   return json({ ok: true, deleted: (r && r.meta && r.meta.changes) || 0 });
 }
+
+// Banyak anak sekaligus (hapus per rombel / per kelas / semua anak).
+const ARCH_IDS_PER_STMT = 90;
+function idsFrom(body) {
+  const a = body && Array.isArray(body.students) ? body.students : [];
+  const ids = [...new Set(a.map((x) => String(x == null ? '' : x)).filter((x) => x && x.length <= 80))];
+  if (!ids.length) throw new HttpError(400, 'Daftar anak kosong.');
+  if (ids.length > 3000) throw new HttpError(413, 'Terlalu banyak anak sekaligus.');
+  return ids;
+}
+function chunks(ids) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += ARCH_IDS_PER_STMT) out.push(ids.slice(i, i + ARCH_IDS_PER_STMT));
+  return out;
+}
+export async function archiveStudentsCount(env, body) {
+  const res = await env.DB.batch(chunks(idsFrom(body)).map((c) =>
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM progress_archive WHERE student_id IN (${c.map((_, i) => '?' + (i + 1)).join(',')})`).bind(...c)));
+  return json({ n: res.reduce((s, r) => s + ((r.results && r.results[0] && r.results[0].n) || 0), 0) });
+}
+export async function archiveStudentsDelete(env, body) {
+  const res = await env.DB.batch(chunks(idsFrom(body)).map((c) =>
+    env.DB.prepare(`DELETE FROM progress_archive WHERE student_id IN (${c.map((_, i) => '?' + (i + 1)).join(',')})`).bind(...c)));
+  return json({ ok: true, deleted: res.reduce((s, r) => s + ((r.meta && r.meta.changes) || 0), 0) });
+}
