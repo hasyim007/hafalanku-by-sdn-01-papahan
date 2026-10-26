@@ -1,0 +1,5 @@
+
+:root{color-scheme:light}
+html,body{background:#eceeed;margin:0}
+body{font-family:'Montserrat','Plus Jakarta Sans',Inter,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:#10302a}
+#loginRoot{position:fixed;inset:0;z-index:9999;overflow:auto;background:#eceeed}

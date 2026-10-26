@@ -1,0 +1,28 @@
+# Hafalanku: Cloudflare Worker + static assets + D1
+name = "hafalanku"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+# Halaman statis (folder public/) disajikan langsung oleh Cloudflare.
+# Worker hanya dijalankan untuk alamat /api/*, jadi file statis tidak
+# memakai kuota request Worker.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+# Database D1. Ganti database_id dengan Database ID dari dashboard Cloudflare
+# (Storage & Databases → D1 → hafalanku-db), lalu Commit.
+[[d1_databases]]
+binding = "DB"
+database_name = "hafalanku"
+database_id = "b1a27f1d-5af1-4441-afe8-e1bcbb9a1bf7"
+
+[vars]
+# Jumlah putaran PBKDF2 untuk hash kata sandi (maksimum Workers: 100000).
+# Plan gratis dibatasi 10 ms CPU per request, jadi nilai bawaan dibuat sedang.
+# Jika memakai plan Workers berbayar, naikkan ke 100000.
+PBKDF2_ITER = "30000"
+
+[observability]
+enabled = true

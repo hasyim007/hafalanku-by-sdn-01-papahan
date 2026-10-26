@@ -1,0 +1,16 @@
+{
+  "name": "hafalanku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hafalanku: pencatatan hafalan siswa (Cloudflare Worker + D1)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute hafalanku-db --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute hafalanku-db --local --file=schema.sql",
+    "db:drop": "wrangler d1 execute hafalanku-db --remote --file=drop-schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
