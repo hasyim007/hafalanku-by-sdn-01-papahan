@@ -2189,3 +2189,16 @@ ${PG_CSS}
   #appRoot .lv-mv::after,#appRoot .arrow::after,.cd-remind .x::after{content:"";position:absolute;inset:-8px}
   .cd-remind .x::after{inset:-6px}
 }
+
+/* ===== Fix: dropdown "Impor & Alat" terpotong kartu judul ===== */
+#appRoot #view-siswa>.sectiontitle,
+#appRoot .view>.sectiontitle:has(.ds-menu){
+  overflow:visible;z-index:30
+}
+#appRoot #view-siswa>.sectiontitle::after,
+#appRoot .view>.sectiontitle:has(.ds-menu)::after{
+  right:0;top:0;width:260px;height:100%;
+  border-radius:0 22px 22px 0;
+  background:radial-gradient(circle at 70% 30%,rgba(107,120,255,.18),rgba(107,120,255,0) 70%)
+}
+#appRoot .ds-pop{z-index:60}
