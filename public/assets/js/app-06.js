@@ -114,13 +114,21 @@ function scCorner(g,w,h,T,qx,qy){let x0=qx?Math.floor(w*.6):0,x1=qx?w:Math.ceil(
   while(st.length){let q=st.pop(),X=q%w,Y=(q/w)|0;n++;sx+=X;sy+=Y;if(X<a)a=X;if(X>b)b=X;if(Y<c)c=Y;if(Y>e)e=Y;for(let d=0;d<4;d++){let nx=X+D[d],ny=Y+D[d+1];if(nx<x0||nx>=x1||ny<y0||ny>=y1)continue;let r=ny*w+nx;if(!seen[r]&&g[r]<T){seen[r]=1;st.push(r)}}}
   let bw=b-a+1,bh=e-c+1,ar=bw/bh;if(n>60&&n<maxN&&n/(bw*bh)>.7&&ar>.7&&ar<1.4&&(!best||n>best.n))best={n,x:sx/n,y:sy/n}}
  return best}
+/* Homografi (perspektif) dari 4 penanda sudut: memetakan koordinat mm formulir ke piksel foto.
+   Interpolasi bilinear meleset beberapa mm saat foto diambil miring, sehingga bulatan terbaca kosong. */
+function scHomog(src,dst){const A=[];for(let i=0;i<4;i++){const[x,y]=src[i],[u,v]=dst[i];A.push([x,y,1,0,0,0,-u*x,-u*y,u]);A.push([0,0,0,x,y,1,-v*x,-v*y,v])}
+ const n=8;for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;[A[c],A[p]]=[A[p],A[c]];
+  for(let r=0;r<n;r++)if(r!==c){const f=A[r][c]/A[c][c];for(let k=c;k<=n;k++)A[r][k]-=f*A[c][k]}}
+ const h=[];for(let i=0;i<n;i++)h.push(A[i][n]/A[i][i]);return[...h,1]}
 async function scAnalyze(f){let img=await new Promise((ok,no)=>{let i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(f)}),k=Math.min(1,1600/Math.max(img.width,img.height)),w=Math.round(img.width*k),h=Math.round(img.height*k),c=document.createElement('canvas');c.width=w;c.height=h;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0,w,h);URL.revokeObjectURL(img.src);
- let d=cx.getImageData(0,0,w,h),g=new Uint8Array(w*h);for(let i=0;i<w*h;i++)g[i]=(d.data[i*4]*.3+d.data[i*4+1]*.59+d.data[i*4+2]*.11)|0;
- let T=otsu(g),it={file:f.name,studentId:null,classId:null,page:0,marksByPage:[],err:''},q=window.jsQR&&jsQR(d.data,w,h);
+ return scAnalyzeData(cx.getImageData(0,0,w,h),w,h,f.name)}
+/* Membaca satu gambar yang sudah berupa piksel. Dipakai scan file dan scan kamera otomatis. */
+function scAnalyzeData(d,w,h,name){let g=new Uint8Array(w*h);for(let i=0;i<w*h;i++)g[i]=(d.data[i*4]*.3+d.data[i*4+1]*.59+d.data[i*4+2]*.11)|0;
+ let T=otsu(g),it={file:name,studentId:null,classId:null,page:0,marksByPage:[],err:''},q=window.jsQR&&jsQR(d.data,w,h);
  let qm=q&&/^HK[12]\|(\d+)(?:\|(\d+))?$/.exec(q.data);if(qm){let s=students.find(x=>String(x.id)===qm[1]);if(s){it.studentId=s.id;it.classId=s.classId}if(qm[2]!=null&&+qm[2]<JUZ_CATALOG.length)it.page=+qm[2]}
  let cs=[[0,0],[1,0],[0,1],[1,1]].map(([a,b])=>scCorner(g,w,h,T,a,b));
  if(cs.some(x=>!x)){it.err='Penanda sudut halaman tidak terbaca. Foto seluruh halaman, tegak, terang, dan tidak terpotong.';return it}
- let[tl,tr,bl,br]=cs,mp=(mx,my)=>{let u=(mx-12)/186,v=(my-12)/273;return[(1-u)*(1-v)*tl.x+u*(1-v)*tr.x+(1-u)*v*bl.x+u*v*br.x,(1-u)*(1-v)*tl.y+u*(1-v)*tr.y+(1-u)*v*bl.y+u*v*br.y]},pm=Math.hypot(tr.x-tl.x,tr.y-tl.y)/186;
+ let[tl,tr,bl,br]=cs,Hm=scHomog([[12,12],[198,12],[12,285],[198,285]],[[tl.x,tl.y],[tr.x,tr.y],[bl.x,bl.y],[br.x,br.y]]),mp=(mx,my)=>{let den=Hm[6]*mx+Hm[7]*my+1;return[(Hm[0]*mx+Hm[1]*my+Hm[2])/den,(Hm[3]*mx+Hm[4]*my+Hm[5])/den]},pm=Math.hypot(tr.x-tl.x,tr.y-tl.y)/186;
  it.marksByPage=JUZ_CATALOG.map((_,pi)=>scLayout(pi).items.map(t=>{let[px,py]=mp(t.cx,t.cy),r=1.6*pm,n=0,dk=0;for(let yy=-r;yy<=r;yy++)for(let xx=-r;xx<=r;xx++){if(xx*xx+yy*yy>r*r)continue;let X=Math.round(px+xx),Y=Math.round(py+yy);if(X<0||Y<0||X>=w||Y>=h)continue;n++;if(g[Y*w+X]<T)dk++}return n>0&&dk/n>.3}));
  return it}
 async function scRun(files){let st=$('scStatus');if(!files.length)return;await lib('jsQR');scItems=[];
@@ -149,10 +157,11 @@ function scSet(i,k,v){let it=scItems[i];if(k==='classId'){it.classId=v?+v:null;i
 function scTog(i,j){let it=scItems[i],p=it.page||0;it.marksByPage=it.marksByPage||[];it.marksByPage[p]=it.marksByPage[p]||[];it.marksByPage[p][j]=!it.marksByPage[p][j];scRender()}
 function firstOpenLevel(s){const K=Object.keys(HAFALAN_CURRICULUM),cur=Math.max(0,K.indexOf(s.hafalanLevel||'1')),open=l=>HAFALAN_CURRICULUM[l].some(([nm,mx])=>hfSurahStats(s,nm,mx).hafal<mx);return K.slice(cur).find(open)||K.slice(0,cur).find(open)||K[K.length-1]}
 let hkAutoSeq=0;
+function scApply(it){let s=students.find(x=>x.id===it.studentId);if(!s||it.err)return -1;let v=scLv(it),c=0;s.surahProgress=s.surahProgress||{};
+  v.L.items.forEach((t,j)=>{if(!v.mk[j])return;s.surahProgress[t.n]={level:t.l,surah:t.n,from:1,to:t.m,status:'Hafal',date:today(),src:'scan'};logs.push({id:Date.now()*1000+(++hkAutoSeq),studentId:s.id,studentName:s.name,classId:s.classId,date:today(),surah:t.n,from:1,to:t.m,status:'Hafal',note:'Scan formulir',auto:true});c++});
+  if(c)s.hafalanLevel=s.hafalanLevel||defaultHafalanLevel(s);return c}
 function scSave(){let n=0,skip=0;
- scItems=scItems.filter(it=>{let s=students.find(x=>x.id===it.studentId);if(!s||it.err){skip++;return true}let v=scLv(it),any=false;s.surahProgress=s.surahProgress||{};
-  v.L.items.forEach((t,j)=>{if(!v.mk[j])return;s.surahProgress[t.n]={level:t.l,surah:t.n,from:1,to:t.m,status:'Hafal',date:today(),src:'scan'};logs.push({id:Date.now()*1000+(++hkAutoSeq),studentId:s.id,studentName:s.name,classId:s.classId,date:today(),surah:t.n,from:1,to:t.m,status:'Hafal',note:'Scan formulir',auto:true});any=true});
-  if(any)s.hafalanLevel=s.hafalanLevel||defaultHafalanLevel(s);n++;return false});
+ scItems=scItems.filter(it=>{if(scApply(it)<0){skip++;return true}n++;return false});
  if(!n){toast('Belum ada formulir yang bisa disimpan. Pilih anak untuk tiap formulir.');return}
  refresh();scRender();toast(`${n} formulir disimpan ke kelas${skip?` · ${skip} belum dipilih anaknya`:''}.`)}
 const _scGo=go;go=function(v,b){_scGo(v,b);if(v==='scan'){$('pagetitle').textContent=$('crumb').textContent='Scan Formulir Hafalan';$('scClass').innerHTML=classOptions(+$('scClass').value||classes[0]?.id);scEnsureJuzSel();scRender()}};
