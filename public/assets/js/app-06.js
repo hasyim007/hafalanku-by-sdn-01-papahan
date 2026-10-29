@@ -95,7 +95,7 @@ function scPage(k,L,hasQR){let a=(x,y,s,c,w)=>`<div class="${c||''}" style="left
  +a(14,43,'font-size:4.1mm;border-bottom:.25mm solid #000;height:7mm;line-height:6mm','',128)+`<span style="${lb}">Nama</span><b style="font-weight:700">${esc(k.name||'')}</b></div>`
  +a(14,53,'font-size:4.1mm;border-bottom:.25mm solid #000;height:7mm;line-height:6mm','',70)+`<span style="${lb}">Kelas</span><b style="font-weight:700">${esc(k.kelas||'')}</b></div>`
  +a(14,63,'font-size:3mm;line-height:4.2mm;color:#000;background:#fff;border:.25mm solid #000;border-radius:1.6mm;padding:1.7mm 3.5mm;box-sizing:border-box;height:11mm','',178)+`<b style="color:#000">Petunjuk.</b> Hitamkan penuh bulatan (●) di kolom Hafal untuk surat yang sudah dihafal. Gunakan pulpen hitam atau biru tua. Jangan melipat atau memotong lembar ini.</div>`
- +(hasQR&&k.id?`<div style="position:absolute;left:152mm;top:14mm;width:36mm;height:36mm">${qrSvg('HK2|'+k.id+'|'+L.pi)}</div>`+a(152,50.5,'font-size:2.5mm;color:#000;text-align:center','',36)+`Kode QR anak</div>`:'')
+ +(hasQR&&k.id?`<div style="position:absolute;left:146mm;top:10mm;width:46mm;height:46mm">${qrSvg('HK2|'+k.id+'|'+L.pi)}</div>`+a(146,57.5,'font-size:2.5mm;color:#000;text-align:center','',46)+`Kode QR anak</div>`:'')
  +L.heads.map(h=>a(h.x,h.y+.6,'height:6.8mm;line-height:6.8mm;background:#fff;border:.3mm solid #000;border-radius:1.4mm;font-size:3.6mm;font-weight:700;color:#000;padding-left:3mm;box-sizing:border-box','',SC.cw)+`Level ${h.l}<span style="position:absolute;right:${SC.br*2-1.9}mm;font-size:2.7mm;font-weight:600;color:#000">Hafal</span></div>`).join('')
  +L.items.map(t=>a(t.x+2,t.cy-2.4,'font-size:3.7mm;line-height:4.8mm;white-space:nowrap;color:#000','',SC.cw-14)+`<span style="display:inline-block;width:5.5mm;color:#000;font-size:3.1mm">${t.i+1}</span>${esc(t.n)} <span style="font-size:2.8mm;color:#000">(${t.m} ayat)</span></div><i class="bb" style="left:${t.cx-SC.br}mm;top:${t.cy-SC.br}mm"></i>`).join('')
  +a(20,284.2,'border-top:.25mm solid #000;height:0','',170)+`</div>`+a(20,285.6,'text-align:center;font-size:3mm;font-weight:600;color:#000;letter-spacing:.02em','',170)+`${esc(settings.school)}<span style="margin:0 2mm">|</span><span style="font-weight:500">TA ${esc(settings.year)}</span>${JUZ_CATALOG.length>1?'<span style="margin:0 2mm">|</span><span style="font-weight:500">'+esc(L.title)+'</span>':''}</div>`+a(20,289.8,'text-align:center;font-size:2.5mm;color:#000','',170)+`Dicetak oleh ${esc(settings.appName||'Hafalanku')} by ${esc(settings.school)} pada ${esc(window.scStamp||'')}</div>`+`</div>`}
@@ -121,16 +121,31 @@ function scHomog(src,dst){const A=[];for(let i=0;i<4;i++){const[x,y]=src[i],[u,v
   for(let r=0;r<n;r++)if(r!==c){const f=A[r][c]/A[c][c];for(let k=c;k<=n;k++)A[r][k]-=f*A[c][k]}}
  const h=[];for(let i=0;i<n;i++)h.push(A[i][n]/A[i][i]);return[...h,1]}
 async function scAnalyze(f){let img=await new Promise((ok,no)=>{let i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(f)}),k=Math.min(1,1600/Math.max(img.width,img.height)),w=Math.round(img.width*k),h=Math.round(img.height*k),c=document.createElement('canvas');c.width=w;c.height=h;let cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0,w,h);URL.revokeObjectURL(img.src);
- return scAnalyzeData(cx.getImageData(0,0,w,h),w,h,f.name)}
+ return scAnalyzeData(cx.getImageData(0,0,w,h),w,h,f.name,scCropFrom(img,img.naturalWidth||img.width,img.naturalHeight||img.height,w,h))}
 /* Membaca satu gambar yang sudah berupa piksel. Dipakai scan file dan scan kamera otomatis. */
-function scAnalyzeData(d,w,h,name){let g=new Uint8Array(w*h);for(let i=0;i<w*h;i++)g[i]=(d.data[i*4]*.3+d.data[i*4+1]*.59+d.data[i*4+2]*.11)|0;
- let T=otsu(g),it={file:name,studentId:null,classId:null,page:0,marksByPage:[],err:''},q=window.jsQR&&jsQR(d.data,w,h);
- let qm=q&&/^HK[12]\|(\d+)(?:\|(\d+))?$/.exec(q.data);if(qm){let s=students.find(x=>String(x.id)===qm[1]);if(s){it.studentId=s.id;it.classId=s.classId}if(qm[2]!=null&&+qm[2]<JUZ_CATALOG.length)it.page=+qm[2]}
+/* Pembaca QR: pembaca bawaan browser (Chrome Android) umumnya lebih kuat untuk QR kecil; jsQR sebagai cadangan */
+let scBD;
+async function scDecodeData(d,w,h){
+ if(window.BarcodeDetector){try{if(scBD===undefined)scBD=new BarcodeDetector({formats:['qr_code']});
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(new ImageData(d.data,w,h),0,0);
+  const r=await scBD.detect(c);if(r&&r.length)return{data:r[0].rawValue,by:'bawaan'}}catch(e){}}
+ const q=window.jsQR&&jsQR(d.data,w,h);return q?{data:q.data,by:'jsQR'}:null}
+/* Potongan dari sumber asli (foto atau video) dengan koordinat gambar kerja w x h */
+function scCropFrom(src,sw,sh,w,h){return(x,y,cw,ch)=>{const sx=sw/w,sy=sh/h,c=document.createElement('canvas');c.width=Math.max(1,Math.round(cw*sx));c.height=Math.max(1,Math.round(ch*sy));
+ const cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(src,x*sx,y*sy,cw*sx,ch*sy,0,0,c.width,c.height);return cx.getImageData(0,0,c.width,c.height)}}
+async function scAnalyzeData(d,w,h,name,fullCrop){let g=new Uint8Array(w*h);for(let i=0;i<w*h;i++)g[i]=(d.data[i*4]*.3+d.data[i*4+1]*.59+d.data[i*4+2]*.11)|0;
+ let T=otsu(g),it={file:name,studentId:null,classId:null,page:0,marksByPage:[],err:''},q=await scDecodeData(d,w,h);
+ const scQr=q=>{let qm=q&&/^HK[12]\|(\d+)(?:\|(\d+))?$/.exec(q.data);if(qm){let s=students.find(x=>String(x.id)===qm[1]);it.qrId=qm[1];if(s){it.studentId=s.id;it.classId=s.classId}it.reader=q.by;if(qm[2]!=null&&+qm[2]<JUZ_CATALOG.length)it.page=+qm[2]}};
+ scQr(q);
  let cs=[[0,0],[1,0],[0,1],[1,1]].map(([a,b])=>scCorner(g,w,h,T,a,b));
  if(cs.some(x=>!x)){it.err='Penanda sudut halaman tidak terbaca. Foto seluruh halaman, tegak, terang, dan tidak terpotong.';return it}
  let[tl,tr,bl,br]=cs,Hm=scHomog([[12,12],[198,12],[12,285],[198,285]],[[tl.x,tl.y],[tr.x,tr.y],[bl.x,bl.y],[br.x,br.y]]),mp=(mx,my)=>{let den=Hm[6]*mx+Hm[7]*my+1;return[(Hm[0]*mx+Hm[1]*my+Hm[2])/den,(Hm[3]*mx+Hm[4]*my+Hm[5])/den]},pm=Math.hypot(tr.x-tl.x,tr.y-tl.y)/186;
+ /* QR kecil di gambar kerja (foto besar diperkecil): baca ulang dari potongan beresolusi penuh */
+ if(!it.studentId&&fullCrop){let c=[mp(143,6),mp(196,6),mp(143,58),mp(196,58)],xs=c.map(p=>p[0]),ys=c.map(p=>p[1]),
+  x0=Math.max(0,Math.floor(Math.min(...xs))),y0=Math.max(0,Math.floor(Math.min(...ys))),x1=Math.min(w,Math.ceil(Math.max(...xs))),y1=Math.min(h,Math.ceil(Math.max(...ys)));
+  let im=x1>x0&&y1>y0?fullCrop(x0,y0,x1-x0,y1-y0):null;if(im)scQr(await scDecodeData(im,im.width,im.height))}
  it.marksByPage=JUZ_CATALOG.map((_,pi)=>scLayout(pi).items.map(t=>{let[px,py]=mp(t.cx,t.cy),r=1.6*pm,n=0,dk=0;for(let yy=-r;yy<=r;yy++)for(let xx=-r;xx<=r;xx++){if(xx*xx+yy*yy>r*r)continue;let X=Math.round(px+xx),Y=Math.round(py+yy);if(X<0||Y<0||X>=w||Y>=h)continue;n++;if(g[Y*w+X]<T)dk++}return n>0&&dk/n>.3}));
- return it}
+ it.pm=pm;return it}
 async function scRun(files){let st=$('scStatus');if(!files.length)return;await lib('jsQR');scItems=[];
  for(let i=0;i<files.length;i++){st.textContent=`Memproses ${i+1} / ${files.length}…`;try{scItems.push(await scAnalyze(files[i]))}catch(e){scItems.push({file:files[i].name,marks:[],err:'Gambar tidak bisa dibaca.'})}}
  st.textContent=`${scItems.length} formulir terbaca. Periksa hasilnya di bawah, koreksi bila perlu, lalu simpan.`;scRender()}
@@ -146,14 +161,24 @@ function scRender(){const el=$('scList');
  el.innerHTML=sum+scItems.map((it,i)=>{const stt=state(it);
   const head=`<header class="scr-hd"><div class="scr-file"><span class="scr-ico">${ICF}</span><div><b title="${esc(it.file)}">${esc(it.file)}</b><small>Formulir ${i+1} dari ${scItems.length}</small></div></div><span class="scr-pill ${stt}">${PILL[stt]}</span><button type="button" class="scr-x" aria-label="Buang formulir ${esc(it.file)}" title="Buang" onclick="scItems.splice(${i},1);scRender()">${ICX}</button></header>`;
   if(it.err)return `<article class="scr-card is-err">${head}<p class="scr-err">${esc(it.err)}</p></article>`;
+  if(!it.classId&&!it.studentId&&scLastClass)it.classId=scLastClass;
   const ss=students.filter(x=>x.classId==it.classId).sort((a,b)=>a.name.localeCompare(b.name,'id')),V=scLv(it),
    total=V.L.items.length,done=V.mk.filter(Boolean).length,pct=total?Math.round(done/total*100):0;
-  const sel=`<div class="scr-sel"><label><span>Kelas</span><select class="field" onchange="scSet(${i},'classId',this.value)"><option value="">Pilih kelas</option>${classOptions(it.classId)}</select></label><label><span>Anak</span><select class="field" onchange="scSet(${i},'studentId',this.value)"><option value="">Pilih anak</option>${ss.map(x=>`<option value="${x.id}" ${x.id==it.studentId?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>${JUZ_CATALOG.length>1?`<label><span>Halaman</span><select class="field" onchange="scSet(${i},'page',this.value)">${JUZ_CATALOG.map((j,pi)=>`<option value="${pi}" ${pi===(it.page||0)?'selected':''}>${esc(j.title)}</option>`).join('')}</select></label>`:''}</div>`;
+  const note=(it.qrId&&!it.studentId)?`<p style="margin:0 0 8px;color:#b45309;font-size:14px">QR terbaca, tapi ID anak di formulir tidak ada di data. Formulir ini kemungkinan dicetak dari data lama: pilih anaknya manual, lalu cetak ulang formulir.</p>`:'';
+  const find=it.studentId?'':`<div style="margin:0 0 8px"><input class="field" type="search" placeholder="Cari nama anak…" aria-label="Cari nama anak" style="width:100%;box-sizing:border-box" oninput="scFind(${i},this.value)"></div>`;
+  const sel=note+find+`<div class="scr-sel"><label><span>Kelas</span><select class="field" onchange="scSet(${i},'classId',this.value)"><option value="">Pilih kelas</option>${classOptions(it.classId)}</select></label><label><span>Anak</span><select id="scSt${i}" class="field" onchange="scSet(${i},'studentId',this.value)"><option value="">Pilih anak</option>${ss.map(x=>`<option value="${x.id}" ${x.id==it.studentId?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>${JUZ_CATALOG.length>1?`<label><span>Halaman</span><select class="field" onchange="scSet(${i},'page',this.value)">${JUZ_CATALOG.map((j,pi)=>`<option value="${pi}" ${pi===(it.page||0)?'selected':''}>${esc(j.title)}</option>`).join('')}</select></label>`:''}</div>`;
   const prog=`<div class="scr-prog"><div class="scr-prog-t"><span><b>${done}</b> dari ${total} surat ditandai hafal</span><em>${pct}%</em></div><div class="scr-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div></div>`;
   const lv=`<div class="scr-lv">${V.L.heads.map(h=>h.l).map(l=>{let c=0,t=0;const chips=V.L.items.map((x,j)=>{if(x.l!==l)return'';t++;const on=!!V.mk[j];if(on)c++;return `<button type="button" class="scr-chip ${on?'on':''}" aria-pressed="${on}" onclick="scTog(${i},${j})"><span class="ck">${ICC}</span><span>${esc(x.n)}</span></button>`}).join('');
    return `<section class="scr-lvl"><h4>${lvLabel(l)}<small>${c}/${t}</small></h4><div class="scr-chips">${chips}</div></section>`}).join('')}</div>`;
   return `<article class="scr-card is-${stt}">${head}${sel}${prog}${lv}</article>`}).join('')}
-function scSet(i,k,v){let it=scItems[i];if(k==='classId'){it.classId=v?+v:null;it.studentId=null}else if(k==='page')it.page=+v||0;else it.studentId=v?+v:null;scRender()}
+/* Kelas terakhir yang dipilih, dipakai sebagai pilihan awal untuk formulir berikutnya */
+let scLastClass=(()=>{try{return +localStorage.getItem('hk_scLastClass')||null}catch(e){return null}})();
+function scRemember(c){if(!c)return;scLastClass=+c;try{localStorage.setItem('hk_scLastClass',String(scLastClass))}catch(e){}}
+function scSet(i,k,v){let it=scItems[i];if(k==='classId'){it.classId=v?+v:null;it.studentId=null;scRemember(it.classId)}else if(k==='page')it.page=+v||0;else{it.studentId=v?+v:null;const s=students.find(x=>x.id===it.studentId);if(s)scRemember(s.classId)}scRender()}
+/* Cari nama anak di daftar pilihan formulir yang belum dikenali */
+function scFind(i,q){const it=scItems[i],sel=$('scSt'+i);if(!it||!sel)return;const k=(q||'').trim().toLowerCase();
+ const ss=students.filter(x=>x.classId==it.classId&&(!k||x.name.toLowerCase().includes(k)||x.id===it.studentId)).sort((a,b)=>a.name.localeCompare(b.name,'id'));
+ sel.innerHTML='<option value="">Pilih anak</option>'+ss.map(x=>`<option value="${x.id}" ${x.id==it.studentId?'selected':''}>${esc(x.name)}</option>`).join('')}
 function scTog(i,j){let it=scItems[i],p=it.page||0;it.marksByPage=it.marksByPage||[];it.marksByPage[p]=it.marksByPage[p]||[];it.marksByPage[p][j]=!it.marksByPage[p][j];scRender()}
 function firstOpenLevel(s){const K=Object.keys(HAFALAN_CURRICULUM),cur=Math.max(0,K.indexOf(s.hafalanLevel||'1')),open=l=>HAFALAN_CURRICULUM[l].some(([nm,mx])=>hfSurahStats(s,nm,mx).hafal<mx);return K.slice(cur).find(open)||K.slice(0,cur).find(open)||K[K.length-1]}
 let hkAutoSeq=0;
